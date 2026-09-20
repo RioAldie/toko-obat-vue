@@ -29,7 +29,6 @@ const menuUtama = [
   { title: "Kasir", url: "/sales", icon: ShoppingCart },
   { title: "Produk", url: "/products", icon: Package },
   { title: "Kategori", url: "/categories", icon: Tags },
-  { title: "Merek", url: "/brands", icon: Award },
   { title: "Satuan", url: "/units", icon: Scale },
 ]
 

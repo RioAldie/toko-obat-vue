@@ -68,12 +68,27 @@ const fetchData = async () => {
   try {
     const [productsRes, usersRes] = await Promise.all([
       fetchApi('/products'),
-      fetchApi('/users')
+      fetchApi('/users').catch(() => [])
     ])
     products.value = productsRes || []
-    users.value = usersRes || []
+    
+    let fetchedUsers = usersRes || []
+    if (fetchedUsers.length === 0) {
+      const currentUserId = localStorage.getItem('userId')
+      const currentUsername = localStorage.getItem('username') || 'Kasir'
+      if (currentUserId) {
+        fetchedUsers = [{ id: currentUserId, username: currentUsername }]
+      }
+    }
+    users.value = fetchedUsers
+
     if (users.value.length > 0) {
-      selectedUserId.value = users.value[0].id
+      const currentUserId = localStorage.getItem('userId')
+      if (currentUserId && users.value.some(u => String(u.id) === String(currentUserId))) {
+        selectedUserId.value = currentUserId
+      } else {
+        selectedUserId.value = String(users.value[0].id)
+      }
     }
   } catch (error: any) {
     toast.error('Gagal mengambil data', { description: error.message })

@@ -45,6 +45,7 @@ const handleLogin = async () => {
       localStorage.setItem("token", data.access_token)
       localStorage.setItem("role", data.user.role)
       localStorage.setItem("userId", data.user.id)
+      localStorage.setItem("username", data.user.username)
       
       // Navigate to dashboard
       router.push("/")

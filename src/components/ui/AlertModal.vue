@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import {
   Dialog,
   DialogContent,
@@ -18,10 +18,12 @@ const props = withDefaults(defineProps<{
   confirmText?: string
   cancelText?: string
   variant?: 'default' | 'destructive'
+  isLoading?: boolean
 }>(), {
   confirmText: 'OK',
   cancelText: 'Batal',
-  variant: 'default'
+  variant: 'default',
+  isLoading: false
 })
 
 const emit = defineEmits<{
@@ -31,6 +33,12 @@ const emit = defineEmits<{
 }>()
 
 const isProcessing = ref(false)
+
+watch(() => props.isOpen, (newVal) => {
+  if (!newVal) {
+    isProcessing.value = false
+  }
+})
 
 const handleClose = () => {
   if (!isProcessing.value) {
@@ -63,16 +71,16 @@ const handleConfirm = async () => {
         </DialogDescription>
       </DialogHeader>
       <DialogFooter class="mt-4">
-        <Button variant="outline" @click="handleClose" :disabled="isProcessing">
+        <Button variant="outline" @click="handleClose" :disabled="isProcessing || isLoading">
           {{ cancelText }}
         </Button>
         <Button 
           :variant="variant" 
           @click="handleConfirm"
-          :disabled="isProcessing"
+          :disabled="isProcessing || isLoading"
         >
-          <Loader2 v-if="isProcessing" class="mr-2 h-4 w-4 animate-spin" />
-          {{ isProcessing ? 'Memproses...' : confirmText }}
+          <Loader2 v-if="isProcessing || isLoading" class="mr-2 h-4 w-4 animate-spin" />
+          {{ (isProcessing || isLoading) ? 'Memproses...' : confirmText }}
         </Button>
       </DialogFooter>
     </DialogContent>

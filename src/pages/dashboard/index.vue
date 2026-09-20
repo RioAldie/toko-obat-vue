@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { Package, ShoppingCart, TrendingUp, Activity, DollarSign, ArrowUpRight, PackageOpen } from 'lucide-vue-next'
 import { fetchApi } from '@/lib/api'
 
@@ -14,7 +14,16 @@ const stats = ref({
 
 const recentSales = ref<any[]>([])
 const chartData = ref<{ date: string; sales: number; height: string }[]>([])
-const username = ref(localStorage.getItem('username') || 'Admin')
+const storedRole = localStorage.getItem('role') || 'CASHIER'
+const username = ref(storedRole.toUpperCase() === 'ADMIN' ? 'Admin' : 'Kasir')
+
+const greeting = computed(() => {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Selamat Pagi'
+  if (hour < 15) return 'Selamat Siang'
+  if (hour < 18) return 'Selamat Sore'
+  return 'Selamat Malam'
+})
 
 const fetchData = async () => {
   isLoading.value = true
@@ -106,7 +115,7 @@ const formatCurrency = (val: number) => {
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
       <div class="flex flex-col">
         <h1 class="text-4xl font-extrabold tracking-tight text-gray-900 bg-clip-text text-transparent bg-gradient-to-r from-primary to-green-600">
-          Selamat Datang, {{ username }}! 👋
+          {{ greeting }}, {{ username }}! 👋
         </h1>
         <p class="text-muted-foreground mt-1 text-lg">Inilah ringkasan performa toko obat Anda hari ini.</p>
       </div>

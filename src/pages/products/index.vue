@@ -548,6 +548,7 @@ const columns = [
       :description="`Apakah Anda yakin ingin menghapus produk ${productToDelete?.name}? Tindakan ini tidak dapat dibatalkan.`"
       variant="destructive"
       confirmText="Ya, Hapus"
+      :isLoading="isDeleting"
       @confirm="executeDelete"
     />
 
