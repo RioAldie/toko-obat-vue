@@ -19,11 +19,13 @@ const props = withDefaults(defineProps<{
   cancelText?: string
   variant?: 'default' | 'destructive'
   isLoading?: boolean
+  showConfirm?: boolean
 }>(), {
   confirmText: 'OK',
   cancelText: 'Batal',
   variant: 'default',
-  isLoading: false
+  isLoading: false,
+  showConfirm: true
 })
 
 const emit = defineEmits<{
@@ -75,6 +77,7 @@ const handleConfirm = async () => {
           {{ cancelText }}
         </Button>
         <Button 
+          v-if="showConfirm"
           :variant="variant" 
           @click="handleConfirm"
           :disabled="isProcessing || isLoading"

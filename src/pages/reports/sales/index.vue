@@ -3,6 +3,7 @@ import { ref, computed, h } from 'vue'
 import { Eye, FileText, Loader2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
@@ -15,6 +16,7 @@ import AlertModal from '@/components/ui/AlertModal.vue'
 import ReceiptPrinter from '@/components/ReceiptPrinter.vue'
 import { fetchApi } from '@/lib/api'
 import { useSales, useInvalidate } from '@/lib/queries'
+import XLSX from 'xlsx-js-style'
 
 type Sale = {
   id: string
@@ -145,6 +147,115 @@ const handleCancelSale = (id: string) => {
   isAlertOpen.value = true
 }
 
+const isExportMonthOpen = ref(false)
+const exportMonth = ref('')
+
+const openExportDialog = () => {
+  const today = new Date()
+  exportMonth.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+  isExportMonthOpen.value = true
+}
+
+const exportMonthlyToExcel = async () => {
+  if (!exportMonth.value) return
+  
+  const [year, month] = exportMonth.value.split('-')
+  
+  const monthlyData = sales.value.filter(sale => {
+    const d = new Date(sale.createdAt)
+    return d.getFullYear() === parseInt(year) && (d.getMonth() + 1) === parseInt(month)
+  })
+
+  if (monthlyData.length === 0) {
+    toast.error('Tidak ada data penjualan pada bulan tersebut')
+    return
+  }
+
+  toast.info('Menyiapkan data laporan...')
+  
+  try {
+    // Fetch detailed sales to get actual product names since findAll doesn't include them
+    const fullSales = await Promise.all(
+      monthlyData.map((s: any) => fetchApi(`/sales/${s.id}`))
+    )
+
+    const exportData = fullSales.map((sale: any, index: number) => {
+      const itemsList = sale.saleDetails?.map((detail: any) => {
+        const name = detail.product?.name || detail.productName || "Item Manual"
+        return `${name} (x${detail.quantity})`
+      }).join(', ') || '-'
+
+      return {
+        'No.': index + 1,
+        'No. Invoice': sale.invoiceNumber,
+        'Tanggal Transaksi': new Date(sale.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        'Nama Pembeli': sale.buyerName || '-',
+        'Kasir': sale.user?.username || '-',
+        'Daftar Produk': itemsList,
+        'Total Belanja': Number(sale.totalAmount),
+        'Status': sale.status || 'COMPLETED'
+      }
+    })
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData)
+    
+    // Apply Styling
+    const borderAll = {
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } }
+    }
+
+    const headerStyle = {
+      font: { bold: true, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: "4F46E5" } }, // Indigo
+      alignment: { horizontal: "center", vertical: "center" },
+      border: borderAll
+    }
+
+    const cellStyle = {
+      border: borderAll,
+      alignment: { vertical: "center" }
+    }
+
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || "A1:G1")
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C })
+        if (!worksheet[cellAddress]) continue
+        
+        if (R === 0) {
+          worksheet[cellAddress].s = headerStyle
+        } else {
+          worksheet[cellAddress].s = cellStyle
+        }
+      }
+    }
+
+    // Adjust column widths
+    worksheet['!cols'] = [
+      { wch: 5 },  // No
+      { wch: 18 }, // Invoice
+      { wch: 25 }, // Tanggal
+      { wch: 20 }, // Nama Pembeli
+      { wch: 15 }, // Kasir
+      { wch: 40 }, // Daftar Produk
+      { wch: 18 }, // Total
+      { wch: 15 }, // Status
+    ]
+
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, `Penjualan`)
+    
+    const fileName = `Laporan_Penjualan_${exportMonth.value}.xlsx`
+    XLSX.writeFile(workbook, fileName)
+    isExportMonthOpen.value = false
+  } catch (error) {
+    toast.error('Gagal membuat laporan')
+  }
+}
+
 const columns = [
   {
     id: "no",
@@ -170,9 +281,15 @@ const columns = [
     cell: ({ row }: any) => h('div', { class: 'text-gray-600 capitalize' }, row.original.user?.username || '-'),
   },
   {
-    accessorKey: "itemsCount",
-    header: "Jumlah Item",
-    cell: ({ row }: any) => h('div', { class: 'text-gray-600' }, `${row.original._count?.saleDetails || 0} Item`),
+    id: "itemsList",
+    header: "Daftar Produk",
+    cell: ({ row }: any) => {
+      const itemsList = row.original.saleDetails?.map((detail: any) => {
+        const name = detail.product?.name || detail.productName || "Item Manual"
+        return `${name} (x${detail.quantity})`
+      }).join(', ') || '-'
+      return h('div', { class: 'text-gray-600 max-w-[250px] truncate', title: itemsList }, itemsList)
+    },
   },
   {
     accessorKey: "totalAmount",
@@ -244,6 +361,14 @@ const columns = [
             class="h-9 font-medium"
           >
             Hari Ini
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            @click="openExportDialog" 
+            class="h-9 font-medium bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+          >
+            Export Excel
           </Button>
         </div>
       </div>
@@ -357,5 +482,23 @@ const columns = [
       :confirmText="alertConfig.onConfirm ? 'Ya, Proses' : 'OK'"
       cancelText="Batal"
     />
+
+    <Dialog v-model:open="isExportMonthOpen">
+      <DialogContent class="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Export Laporan Bulanan</DialogTitle>
+        </DialogHeader>
+        <div class="space-y-4 py-4">
+          <div class="space-y-2">
+            <Label for="export-month">Pilih Bulan & Tahun</Label>
+            <Input id="export-month" type="month" v-model="exportMonth" class="w-full" />
+          </div>
+          <Button @click="exportMonthlyToExcel" class="w-full bg-green-600 hover:bg-green-700 text-white" :disabled="!exportMonth">
+            <FileText class="mr-2 h-4 w-4" />
+            Download Excel
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

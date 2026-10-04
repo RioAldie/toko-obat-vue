@@ -514,9 +514,10 @@ const printReceipt = () => {
           :title="alertConfig.title"
           :description="alertConfig.description"
           :variant="alertConfig.variant"
+          :showConfirm="alertConfig.isConfirmAction"
           @confirm="alertConfig.isConfirmAction ? executeCheckout() : undefined"
           :confirmText="alertConfig.isConfirmAction ? 'Ya, Proses' : 'OK'"
-          cancelText="Batal"
+          :cancelText="alertConfig.isConfirmAction ? 'Batal' : 'Batal'"
         />
       </div>
 

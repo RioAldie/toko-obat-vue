@@ -29,9 +29,28 @@ const isLoading = unitsQuery.isLoading
 const invalidate = useInvalidate()
 const isSubmitting = ref(false)
 const isOpen = ref(false)
+const editingId = ref<string | null>(null)
 
 const formName = ref('')
 const formDescription = ref('')
+
+const resetForm = () => {
+  editingId.value = null
+  formName.value = ''
+  formDescription.value = ''
+}
+
+const openAdd = () => {
+  resetForm()
+  isOpen.value = true
+}
+
+const openEdit = (unit: Unit) => {
+  editingId.value = unit.id
+  formName.value = unit.name
+  formDescription.value = unit.description || ''
+  isOpen.value = true
+}
 
 // Delete State
 const isDeleteDialogOpen = ref(false)
@@ -48,20 +67,30 @@ const onSubmit = async () => {
   if (!formName.value) return
   isSubmitting.value = true
   try {
-    await fetchApi('/units', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: formName.value,
-        description: formDescription.value,
-      }),
-    })
-    toast.success('Satuan berhasil ditambahkan!')
+    if (editingId.value) {
+      await fetchApi(`/units/${editingId.value}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: formName.value,
+          description: formDescription.value,
+        }),
+      })
+      toast.success('Satuan berhasil diperbarui!')
+    } else {
+      await fetchApi('/units', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: formName.value,
+          description: formDescription.value,
+        }),
+      })
+      toast.success('Satuan berhasil ditambahkan!')
+    }
     isOpen.value = false
-    formName.value = ''
-    formDescription.value = ''
+    resetForm()
     fetchUnits()
   } catch (error: any) {
-    toast.error('Gagal menambahkan satuan', { description: error.message })
+    toast.error('Gagal menyimpan satuan', { description: error.message })
   } finally {
     isSubmitting.value = false
   }
@@ -115,6 +144,7 @@ const columns = [
                   variant: 'ghost',
                   size: 'icon',
                   class: 'h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50',
+                  onClick: () => openEdit(unit),
                 },
                 () => h(Edit, { class: 'h-4 w-4' })
               ),
@@ -143,15 +173,15 @@ const columns = [
         <p class="text-muted-foreground text-sm">Kelola satuan untuk mengukur stok produk (misal: Liter, Kg, Botol).</p>
       </div>
       
-      <Dialog v-if="!isCashier" v-model:open="isOpen">
+      <Dialog v-if="!isCashier" :open="isOpen" @update:open="(val) => { isOpen = val; if(!val) resetForm(); }">
         <DialogTrigger asChild>
-          <Button class="bg-primary text-white hover:bg-primary/90 rounded-lg shadow-sm">
+          <Button @click="openAdd" class="bg-primary text-white hover:bg-primary/90 rounded-lg shadow-sm">
             <Plus class="mr-2 h-4 w-4" /> Tambah Satuan
           </Button>
         </DialogTrigger>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Tambah Satuan Baru</DialogTitle>
+            <DialogTitle>{{ editingId ? 'Edit Satuan' : 'Tambah Satuan Baru' }}</DialogTitle>
           </DialogHeader>
           <form @submit.prevent="onSubmit" class="space-y-6 mt-6">
             <div class="space-y-3">
@@ -180,7 +210,7 @@ const columns = [
                 class="w-full sm:w-auto bg-gradient-to-b from-primary/90 to-primary hover:from-primary hover:to-primary/90 text-primary-foreground shadow-md transition-all rounded-xl h-10 px-8 font-medium"
               >
                 <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
-                Simpan Satuan
+                {{ editingId ? 'Simpan Perubahan' : 'Simpan Satuan' }}
               </Button>
             </div>
           </form>
