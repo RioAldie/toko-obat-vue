@@ -1,21 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { computed } from 'vue'
 import { Package, ShoppingCart, TrendingUp, Activity, DollarSign, ArrowUpRight, PackageOpen } from 'lucide-vue-next'
-import { fetchApi } from '@/lib/api'
-
-const isLoading = ref(true)
-const stats = ref({
-  totalProducts: 0,
-  totalCategories: 0,
-  totalRevenue: 0,
-  todayRevenue: 0,
-  lowStockCount: 0,
-})
-
-const recentSales = ref<any[]>([])
-const chartData = ref<{ date: string; sales: number; height: string }[]>([])
+import { useProducts, useCategories, useSales } from '@/lib/queries'
 const storedRole = localStorage.getItem('role') || 'CASHIER'
-const username = ref(storedRole.toUpperCase() === 'ADMIN' ? 'Admin' : 'Kasir')
+const username = storedRole.toUpperCase() === 'ADMIN' ? 'Admin' : 'Kasir'
 
 const greeting = computed(() => {
   const hour = new Date().getHours()
@@ -25,83 +13,71 @@ const greeting = computed(() => {
   return 'Selamat Malam'
 })
 
-const fetchData = async () => {
-  isLoading.value = true
-  try {
-    const role = localStorage.getItem('role')
-    const isCashier = role === 'CASHIER'
+const role = localStorage.getItem('role')
+const isCashier = role === 'CASHIER'
 
-    // Cashiers might not have access to categories, so we handle fetch errors gracefully
-    const [products, categoriesRes, sales] = await Promise.all([
-      fetchApi('/products').catch(() => []),
-      isCashier ? Promise.resolve([]) : fetchApi('/categories').catch(() => []),
-      fetchApi('/sales').catch(() => [])
-    ])
+// Errors are silent here (same as before): the dashboard just shows zeros.
+// Cashiers might not have access to categories, so that query is skipped for them.
+const productsQuery = useProducts({ silent: true })
+const categoriesQuery = useCategories({ silent: true, enabled: !isCashier })
+const salesQuery = useSales({ silent: true })
 
-    const completedSales = (sales || []).filter((s: any) => s.status !== 'CANCELED')
-    
-    // Calculate basic stats
-    stats.value.totalProducts = products?.length || 0
-    stats.value.totalCategories = categoriesRes?.length || 0
-    stats.value.lowStockCount = (products || []).filter((p: any) => p.stock > 0 && p.stock <= 10).length
-    
-    // Calculate revenues
-    const todayStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-    let totalRev = 0
-    let todayRev = 0
-    
-    const salesDataByDate: Record<string, number> = {}
+const isLoading = computed(() => productsQuery.isLoading.value || salesQuery.isLoading.value)
 
-    completedSales.forEach((sale: any) => {
-      const amount = Number(sale.totalAmount) || 0
-      totalRev += amount
-      
-      const dateObj = new Date(sale.createdAt)
-      const dateStr = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-      const chartDateStr = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
-      
-      if (dateStr === todayStr) {
-        todayRev += amount
-      }
-      
-      salesDataByDate[chartDateStr] = (salesDataByDate[chartDateStr] || 0) + amount
-    })
+const completedSales = computed(() =>
+  (salesQuery.data.value ?? []).filter((s: any) => s.status !== 'CANCELED')
+)
 
-    stats.value.totalRevenue = totalRev
-    stats.value.todayRevenue = todayRev
+const stats = computed(() => {
+  const products = productsQuery.data.value ?? []
+  const todayStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+  let totalRevenue = 0
+  let todayRevenue = 0
 
-    // Prepare chart data (Last 7 days)
-    const rawChartData = Array.from({ length: 7 }).map((_, i) => {
-      const d = new Date()
-      d.setDate(d.getDate() - (6 - i))
-      const chartDateStr = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
-      return { 
-        date: chartDateStr, 
-        sales: salesDataByDate[chartDateStr] || 0 
-      }
-    })
+  completedSales.value.forEach((sale: any) => {
+    const amount = Number(sale.totalAmount) || 0
+    totalRevenue += amount
+    const dateStr = new Date(sale.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+    if (dateStr === todayStr) todayRevenue += amount
+  })
 
-    const maxSale = Math.max(...rawChartData.map(d => d.sales), 1) // prevent div by zero
-    chartData.value = rawChartData.map(d => ({
-      ...d,
-      height: `${Math.max((d.sales / maxSale) * 100, 4)}%` // min 4% height for visibility
-    }))
-
-    // Recent 5 sales
-    recentSales.value = completedSales
-      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 5)
-
-  } catch (error) {
-    console.error("Dashboard fetch error", error)
-  } finally {
-    isLoading.value = false
+  return {
+    totalProducts: products.length,
+    totalCategories: (categoriesQuery.data.value ?? []).length,
+    totalRevenue,
+    todayRevenue,
+    lowStockCount: products.filter((p: any) => p.stock > 0 && p.stock <= 10).length,
   }
-}
-
-onMounted(() => {
-  fetchData()
 })
+
+// Chart data (last 7 days)
+const chartData = computed(() => {
+  const salesDataByDate: Record<string, number> = {}
+  completedSales.value.forEach((sale: any) => {
+    const chartDateStr = new Date(sale.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+    salesDataByDate[chartDateStr] = (salesDataByDate[chartDateStr] || 0) + (Number(sale.totalAmount) || 0)
+  })
+
+  const rawChartData = Array.from({ length: 7 }).map((_, i) => {
+    const d = new Date()
+    d.setDate(d.getDate() - (6 - i))
+    const chartDateStr = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+    return { date: chartDateStr, sales: salesDataByDate[chartDateStr] || 0 }
+  })
+
+  const maxSale = Math.max(...rawChartData.map(d => d.sales), 1) // prevent div by zero
+  return rawChartData.map(d => ({
+    ...d,
+    height: `${Math.max((d.sales / maxSale) * 100, 4)}%` // min 4% height for visibility
+  }))
+})
+
+// Recent 5 sales (copy before sorting so the shared cache isn't mutated)
+const recentSales = computed(() =>
+  [...completedSales.value]
+    .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5)
+)
 
 const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(val)

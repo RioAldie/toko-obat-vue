@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, h } from 'vue'
+import { ref, computed, h } from 'vue'
 import { Eye, FileText, Loader2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,7 @@ import DataTable from '@/components/ui/DataTable.vue'
 import AlertModal from '@/components/ui/AlertModal.vue'
 import ReceiptPrinter from '@/components/ReceiptPrinter.vue'
 import { fetchApi } from '@/lib/api'
+import { useSales, useInvalidate } from '@/lib/queries'
 
 type Sale = {
   id: string
@@ -38,8 +39,10 @@ const getTodayString = () => {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-const sales = ref<Sale[]>([])
-const isLoadingPage = ref(true)
+const salesQuery = useSales<Sale>()
+const sales = computed(() => salesQuery.data.value ?? [])
+const isLoadingPage = salesQuery.isLoading
+const invalidate = useInvalidate()
 
 const isDetailOpen = ref(false)
 const selectedSale = ref<any | null>(null)
@@ -59,21 +62,8 @@ const alertConfig = ref({
   onConfirm: undefined as (() => void) | undefined
 })
 
-const fetchData = async () => {
-  isLoadingPage.value = true
-  try {
-    const res = await fetchApi('/sales')
-    sales.value = res || []
-  } catch (error: any) {
-    toast.error('Gagal mengambil data', { description: error.message })
-  } finally {
-    isLoadingPage.value = false
-  }
-}
-
-onMounted(() => {
-  fetchData()
-})
+// Cancelling a sale restores stock, so refresh those caches too
+const fetchData = () => invalidate('sales', 'products', 'stockMovements')
 
 const filteredData = computed(() => {
   return sales.value.filter(sale => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, h } from 'vue'
+import { ref, computed, h } from 'vue'
 import { Plus, Edit, Trash2, Loader2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +15,7 @@ import { toast } from 'vue-sonner'
 import DataTable from '@/components/ui/DataTable.vue'
 import AlertModal from '@/components/ui/AlertModal.vue'
 import { fetchApi } from '@/lib/api'
+import { useUnits, useInvalidate } from '@/lib/queries'
 
 type Unit = {
   id: string
@@ -22,8 +23,10 @@ type Unit = {
   description?: string
 }
 
-const units = ref<Unit[]>([])
-const isLoading = ref(true)
+const unitsQuery = useUnits<Unit>()
+const units = computed(() => unitsQuery.data.value ?? [])
+const isLoading = unitsQuery.isLoading
+const invalidate = useInvalidate()
 const isSubmitting = ref(false)
 const isOpen = ref(false)
 
@@ -39,21 +42,7 @@ const isDeleting = ref(false)
 const userRole = localStorage.getItem('role') || ''
 const isCashier = userRole === 'CASHIER'
 
-const fetchUnits = async () => {
-  isLoading.value = true
-  try {
-    const data = await fetchApi('/units')
-    units.value = data || []
-  } catch (error: any) {
-    toast.error('Gagal mengambil data satuan', { description: error.message })
-  } finally {
-    isLoading.value = false
-  }
-}
-
-onMounted(() => {
-  fetchUnits()
-})
+const fetchUnits = () => invalidate('units', 'products')
 
 const onSubmit = async () => {
   if (!formName.value) return

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, h } from 'vue'
+import { ref, computed, h } from 'vue'
 import { Plus, Edit, Trash2, Loader2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +15,7 @@ import { toast } from 'vue-sonner'
 import DataTable from '@/components/ui/DataTable.vue'
 import AlertModal from '@/components/ui/AlertModal.vue'
 import { fetchApi } from '@/lib/api'
+import { useProducts, useCategories, useUnits, useUsers, useInvalidate } from '@/lib/queries'
 
 type Product = {
   id: string
@@ -34,12 +35,24 @@ type Category = { id: string, name: string }
 type Unit = { id: string, name: string }
 type User = { id: string, username: string }
 
-const products = ref<Product[]>([])
-const categories = ref<Category[]>([])
-const units = ref<Unit[]>([])
-const users = ref<User[]>([])
+// We mock user role for now
+const userRole = localStorage.getItem('role') || ''
+const isCashier = userRole === 'CASHIER'
+const userId = localStorage.getItem('userId') || ''
 
-const isLoading = ref(true)
+// Cashier only needs products; admins also need the lists for the Add/Edit forms
+const productsQuery = useProducts<Product>()
+const categoriesQuery = useCategories<Category>({ enabled: !isCashier })
+const unitsQuery = useUnits<Unit>({ enabled: !isCashier })
+const usersQuery = useUsers<User>({ enabled: !isCashier })
+
+const products = computed(() => productsQuery.data.value ?? [])
+const categories = computed(() => categoriesQuery.data.value ?? [])
+const units = computed(() => unitsQuery.data.value ?? [])
+const users = computed(() => usersQuery.data.value ?? [])
+
+const isLoading = productsQuery.isLoading
+const invalidate = useInvalidate()
 const isSubmitting = ref(false)
 
 // Modals State
@@ -59,11 +72,6 @@ const isDeleting = ref(false)
 // History State
 const historyData = ref<any[]>([])
 const historyLoading = ref(false)
-
-// We mock user role for now
-const userRole = localStorage.getItem('role') || ''
-const isCashier = userRole === 'CASHIER'
-const userId = localStorage.getItem('userId') || ''
 
 // Form Data for Add
 const addForm = ref({
@@ -89,36 +97,8 @@ const editForm = ref({
   price: 0,
 })
 
-const fetchData = async () => {
-  isLoading.value = true
-  try {
-    if (isCashier) {
-      // Cashier only needs products
-      const productsRes = await fetchApi('/products')
-      products.value = productsRes || []
-    } else {
-      // Admins/Managers need everything for the Add/Edit forms
-      const [productsRes, categoriesRes, unitsRes, usersRes] = await Promise.all([
-        fetchApi('/products'),
-        fetchApi('/categories'),
-        fetchApi('/units'),
-        fetchApi('/users')
-      ])
-      products.value = productsRes || []
-      categories.value = categoriesRes || []
-      units.value = unitsRes || []
-      users.value = usersRes || []
-    }
-  } catch (error: any) {
-    toast.error('Gagal mengambil data', { description: error.message })
-  } finally {
-    isLoading.value = false
-  }
-}
-
-onMounted(() => {
-  fetchData()
-})
+// Product changes affect stock movements (initial stock) as well
+const fetchData = () => invalidate('products', 'stockMovements')
 
 const onAddSubmit = async () => {
   if (!addForm.value.name || !addForm.value.sku || !addForm.value.categoryId || !addForm.value.unitId) return
@@ -159,7 +139,7 @@ const onEditSubmit = async () => {
   editPending.value = true
   try {
     await fetchApi(`/products/${editingProduct.value.id}`, {
-      method: 'PUT',
+      method: 'PATCH',
       body: JSON.stringify(editForm.value),
     })
     toast.success('Produk berhasil diperbarui!')

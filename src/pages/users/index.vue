@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, h } from 'vue'
+import { ref, computed, h } from 'vue'
 import { Plus, Trash2, Loader2, Edit } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +15,7 @@ import { toast } from 'vue-sonner'
 import DataTable from '@/components/ui/DataTable.vue'
 import AlertModal from '@/components/ui/AlertModal.vue'
 import { fetchApi } from '@/lib/api'
+import { useUsers, useInvalidate } from '@/lib/queries'
 
 type User = {
   id: string
@@ -23,8 +24,10 @@ type User = {
   isActive: boolean
 }
 
-const users = ref<User[]>([])
-const isLoading = ref(true)
+const usersQuery = useUsers<User>()
+const users = computed(() => usersQuery.data.value ?? [])
+const isLoading = usersQuery.isLoading
+const invalidate = useInvalidate()
 const isSubmitting = ref(false)
 
 const isOpen = ref(false)
@@ -38,21 +41,7 @@ const form = ref({
   isActive: 'true'
 })
 
-const fetchData = async () => {
-  isLoading.value = true
-  try {
-    const res = await fetchApi('/users')
-    users.value = res || []
-  } catch (error: any) {
-    toast.error('Gagal mengambil data', { description: error.message })
-  } finally {
-    isLoading.value = false
-  }
-}
-
-onMounted(() => {
-  fetchData()
-})
+const fetchData = () => invalidate('users')
 
 const onSubmit = async () => {
   if (!form.value.username || !form.value.password || !form.value.role) return

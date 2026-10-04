@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useQueryClient } from '@tanstack/vue-query'
 import {
   Home,
   ShoppingCart,
   Package,
   Tags,
-  Award,
   Scale,
   LineChart,
   ClipboardList,
@@ -18,6 +18,7 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+const queryClient = useQueryClient()
 
 // Get role from localStorage or pinia store (mocked for now based on previous Next.js behavior)
 const userRole = computed(() => localStorage.getItem('role') || '')
@@ -54,13 +55,14 @@ const filteredLaporan = computed(() => {
 const handleLogout = () => {
   localStorage.removeItem("token")
   localStorage.removeItem("role")
+  queryClient.clear()
   router.push("/login")
 }
 </script>
 
 <template>
-  <aside class="w-64 border-r border-border/40 bg-white flex flex-col flex-shrink-0 z-10 transition-all duration-300">
-    <div class="h-20 flex flex-row items-center gap-3 px-6 border-b border-transparent flex-shrink-0">
+  <aside class="h-full w-full border-r border-border/40 bg-white flex flex-col flex-shrink-0 z-10">
+    <div class="h-20 flex flex-row items-center gap-3 px-6 pr-12 lg:pr-6 border-b border-transparent flex-shrink-0">
       <div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20 text-primary">
         <Leaf class="h-6 w-6" />
       </div>

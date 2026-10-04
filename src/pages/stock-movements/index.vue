@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, h } from 'vue'
+import { ref, computed, watch, h } from 'vue'
 import { Plus, Loader2, ArrowDownRight, ArrowUpRight, RefreshCcw } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,7 @@ import {
 import { toast } from 'vue-sonner'
 import DataTable from '@/components/ui/DataTable.vue'
 import { fetchApi } from '@/lib/api'
+import { useStockMovements, useProducts, useUsers, useInvalidate } from '@/lib/queries'
 
 type StockMovement = {
   id: string
@@ -30,11 +31,16 @@ type StockMovement = {
 type Product = { id: string, name: string, sku: string }
 type User = { id: string, username: string }
 
-const stockMovements = ref<StockMovement[]>([])
-const products = ref<Product[]>([])
-const users = ref<User[]>([])
+const movementsQuery = useStockMovements<StockMovement>()
+const productsQuery = useProducts<Product>()
+const usersQuery = useUsers<User>()
 
-const isLoading = ref(true)
+const stockMovements = computed(() => movementsQuery.data.value ?? [])
+const products = computed(() => productsQuery.data.value ?? [])
+const users = computed(() => usersQuery.data.value ?? [])
+
+const isLoading = movementsQuery.isLoading
+const invalidate = useInvalidate()
 const isSubmitting = ref(false)
 const isOpen = ref(false)
 
@@ -47,31 +53,15 @@ const form = ref({
   reason: ''
 })
 
-const fetchData = async () => {
-  isLoading.value = true
-  try {
-    const [movementsRes, productsRes, usersRes] = await Promise.all([
-      fetchApi('/stock-movements'),
-      fetchApi('/products'),
-      fetchApi('/users')
-    ])
-    stockMovements.value = movementsRes || []
-    products.value = productsRes || []
-    users.value = usersRes || []
-    
-    if (!form.value.userId && users.value.length > 0) {
-      form.value.userId = users.value[0].id
-    }
-  } catch (error: any) {
-    toast.error('Gagal mengambil data', { description: error.message })
-  } finally {
-    isLoading.value = false
+// Default the user selector to the first user once the list is available
+watch(users, (list) => {
+  if (!form.value.userId && list.length > 0) {
+    form.value.userId = list[0].id
   }
-}
+}, { immediate: true })
 
-onMounted(() => {
-  fetchData()
-})
+// A stock movement changes product stock too
+const fetchData = () => invalidate('stockMovements', 'products')
 
 const onSubmit = async () => {
   if (!form.value.productId || !form.value.userId || !form.value.quantity) return

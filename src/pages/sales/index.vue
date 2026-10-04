@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { Plus, Minus, Trash2, ShoppingCart, CheckCircle2, Search, Printer } from 'lucide-vue-next'
+import { ref, computed, watch } from 'vue'
+import { Plus, Minus, Trash2, ShoppingCart, CheckCircle2, Search, Printer, Loader2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,10 +11,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { toast } from 'vue-sonner'
 import AlertModal from '@/components/ui/AlertModal.vue'
 import ReceiptPrinter from '@/components/ReceiptPrinter.vue'
 import { fetchApi } from '@/lib/api'
+import { useProducts, useUsers, useInvalidate } from '@/lib/queries'
 
 type Product = {
   id: string
@@ -35,11 +35,22 @@ type CartItem = {
   quantity: number | string
 }
 
-const products = ref<Product[]>([])
-const users = ref<User[]>([])
+const productsQuery = useProducts<Product>()
+// Cashiers may not have access to /users -> fail silently and fall back to the logged-in user
+const usersQuery = useUsers<User>({ silent: true })
+const invalidate = useInvalidate()
+
+const products = computed(() => productsQuery.data.value ?? [])
+const users = computed<User[]>(() => {
+  const fetched = usersQuery.data.value ?? []
+  if (fetched.length > 0) return fetched
+  const currentUserId = localStorage.getItem('userId')
+  const currentUsername = localStorage.getItem('username') || 'Kasir'
+  return currentUserId ? [{ id: currentUserId, username: currentUsername }] : []
+})
 const cart = ref<CartItem[]>([])
 
-const isLoadingPage = ref(true)
+const isLoadingPage = computed(() => productsQuery.isLoading.value)
 const isLoading = ref(false)
 const success = ref(false)
 const completedTransaction = ref<any>(null)
@@ -63,43 +74,15 @@ const alertConfig = ref({
   isConfirmAction: false,
 })
 
-const fetchData = async () => {
-  isLoadingPage.value = true
-  try {
-    const [productsRes, usersRes] = await Promise.all([
-      fetchApi('/products'),
-      fetchApi('/users').catch(() => [])
-    ])
-    products.value = productsRes || []
-    
-    let fetchedUsers = usersRes || []
-    if (fetchedUsers.length === 0) {
-      const currentUserId = localStorage.getItem('userId')
-      const currentUsername = localStorage.getItem('username') || 'Kasir'
-      if (currentUserId) {
-        fetchedUsers = [{ id: currentUserId, username: currentUsername }]
-      }
-    }
-    users.value = fetchedUsers
-
-    if (users.value.length > 0) {
-      const currentUserId = localStorage.getItem('userId')
-      if (currentUserId && users.value.some(u => String(u.id) === String(currentUserId))) {
-        selectedUserId.value = currentUserId
-      } else {
-        selectedUserId.value = String(users.value[0].id)
-      }
-    }
-  } catch (error: any) {
-    toast.error('Gagal mengambil data', { description: error.message })
-  } finally {
-    isLoadingPage.value = false
-  }
-}
-
-onMounted(() => {
-  fetchData()
-})
+// Pick the logged-in user as cashier by default (or the first user)
+watch(users, (list) => {
+  if (list.length === 0) return
+  if (selectedUserId.value && list.some(u => String(u.id) === String(selectedUserId.value))) return
+  const currentUserId = localStorage.getItem('userId')
+  selectedUserId.value = currentUserId && list.some(u => String(u.id) === String(currentUserId))
+    ? currentUserId
+    : String(list[0].id)
+}, { immediate: true })
 
 const filteredProducts = computed(() => {
   return products.value.filter(p => 
@@ -124,7 +107,6 @@ const handleCloseSuccess = () => {
   buyerName.value = ''
   note.value = ''
   paymentAmount.value = ''
-  fetchData()
 }
 
 const showAlert = (title: string, description: string, variant: 'default' | 'destructive' = 'default') => {
@@ -258,6 +240,8 @@ const executeCheckout = async () => {
       changeAmount: changeAmount.value
     }
     success.value = true
+    // Stock changed -> refresh product list (in background), sales report and stock movements
+    invalidate('products', 'sales', 'stockMovements')
   } catch (error: any) {
     showAlert('Gagal', 'Gagal melakukan transaksi: ' + error.message, 'destructive')
   } finally {
@@ -271,7 +255,7 @@ const printReceipt = () => {
 </script>
 
 <template>
-  <div class="flex flex-col w-full h-[calc(100vh-8rem)] print:h-auto print:block">
+  <div class="flex flex-col w-full md:h-full print:h-auto print:block">
     <div class="flex flex-col gap-1 mb-4 print:hidden">
       <h2 class="text-3xl font-bold tracking-tight text-gray-900">Penjualan (Kasir)</h2>
       <p class="text-muted-foreground text-sm">Pilih produk dan catat transaksi dengan mudah.</p>
@@ -282,9 +266,9 @@ const printReceipt = () => {
     </div>
     
     <div v-else class="flex-1 min-h-0 print:block">
-      <div class="flex flex-col md:flex-row gap-6 pb-6 h-auto md:h-[calc(100vh-140px)] print:hidden">
+      <div class="flex flex-col md:flex-row gap-4 lg:gap-6 pb-2 md:pb-0 h-auto md:h-full print:hidden">
         <!-- Left: Product Grid -->
-        <div class="w-full md:w-2/3 flex flex-col h-[65vh] md:h-full bg-white/50 backdrop-blur-xl border rounded-2xl shadow-sm overflow-hidden">
+        <div class="w-full md:w-[58%] lg:w-2/3 flex flex-col h-[65vh] md:h-full bg-white/50 backdrop-blur-xl border rounded-2xl shadow-sm overflow-hidden">
           <div class="p-4 border-b bg-white/80 sticky top-0 z-10 backdrop-blur-md flex flex-col gap-4">
             <div class="flex items-center justify-between">
               <h3 class="font-semibold text-lg">Daftar Produk</h3>
@@ -343,7 +327,7 @@ const printReceipt = () => {
         </div>
 
         <!-- Right: Cart -->
-        <div class="w-full md:w-1/3 flex flex-col h-auto md:h-full bg-white/80 backdrop-blur-xl border rounded-2xl shadow-lg overflow-hidden relative">
+        <div class="w-full md:w-[42%] lg:w-1/3 flex flex-col h-auto md:h-full bg-white/80 backdrop-blur-xl border rounded-2xl shadow-lg overflow-hidden relative">
           <div class="p-5 border-b bg-gradient-to-r from-gray-50 to-white">
             <h3 class="font-bold text-xl flex items-center gap-2">
               <ShoppingCart class="h-5 w-5 text-primary" />
@@ -459,7 +443,7 @@ const printReceipt = () => {
               class="w-full h-12 text-lg font-semibold bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-white rounded-xl shadow-md transition-all duration-200"
             >
               <Loader2 v-if="isLoading" class="mr-2 h-4 w-4 animate-spin" />
-              {{ isLoading ? "Memproses..." : "Simpan Transaksi" }}
+              {{ isLoading ? "Memproses..." : "Submit" }}
             </Button>
           </div>
 
