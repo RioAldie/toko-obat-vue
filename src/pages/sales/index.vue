@@ -17,7 +17,6 @@ import {
   SheetHeader,
   SheetTitle,
   SheetDescription,
-  SheetFooter,
   SheetTrigger,
 } from '@/components/ui/sheet'
 import AlertModal from '@/components/ui/AlertModal.vue'
