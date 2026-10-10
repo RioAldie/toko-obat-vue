@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { Plus, Minus, Trash2, ShoppingCart, CheckCircle2, Search, Printer, Loader2 } from 'lucide-vue-next'
+import { Plus, Minus, Trash2, ShoppingCart, CheckCircle2, Search, Printer, Loader2, Settings2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,6 +11,15 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+  SheetTrigger,
+} from '@/components/ui/sheet'
 import AlertModal from '@/components/ui/AlertModal.vue'
 import ReceiptPrinter from '@/components/ReceiptPrinter.vue'
 import { fetchApi } from '@/lib/api'
@@ -255,7 +264,7 @@ const printReceipt = () => {
 </script>
 
 <template>
-  <div class="flex flex-col w-full md:h-full print:h-auto print:block">
+  <div class="flex flex-col w-full md:h-full print:h-auto print:block print:overflow-visible">
     <div class="flex flex-col gap-1 mb-4 print:hidden">
       <h2 class="text-3xl font-bold tracking-tight text-gray-900">Penjualan (Kasir)</h2>
       <p class="text-muted-foreground text-sm">Pilih produk dan catat transaksi dengan mudah.</p>
@@ -266,9 +275,9 @@ const printReceipt = () => {
     </div>
     
     <div v-else class="flex-1 min-h-0 print:block">
-      <div class="flex flex-col md:flex-row gap-4 lg:gap-6 pb-2 md:pb-0 h-auto md:h-full print:hidden">
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-4 lg:gap-6 pb-2 md:pb-0 h-auto md:h-full print:hidden">
         <!-- Left: Product Grid -->
-        <div class="w-full md:w-[58%] lg:w-2/3 flex flex-col h-[65vh] md:h-full bg-white/50 backdrop-blur-xl border rounded-2xl shadow-sm overflow-hidden">
+        <div class="md:col-span-7 lg:col-span-8 flex flex-col h-[65vh] md:h-full bg-white/50 backdrop-blur-xl border rounded-2xl shadow-sm overflow-hidden">
           <div class="p-4 border-b bg-white/80 sticky top-0 z-10 backdrop-blur-md flex flex-col gap-4">
             <div class="flex items-center justify-between">
               <h3 class="font-semibold text-lg">Daftar Produk</h3>
@@ -290,9 +299,9 @@ const printReceipt = () => {
               v-for="product in filteredProducts" 
               :key="product.id" 
               @click="addToCart(product)"
-              class="group relative flex flex-col p-4 border border-gray-100 rounded-2xl cursor-pointer transition-all duration-300 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1 bg-white overflow-hidden min-h-[140px]"
+              class="group relative flex flex-col p-4 border border-gray-100 rounded-2xl cursor-pointer transition-all duration-300 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 lg:hover:-translate-y-1 bg-white overflow-hidden min-h-[140px]"
             >
-              <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300" />
               <div class="flex justify-between items-start mb-2">
                 <span class="inline-flex items-center rounded-full bg-gray-50 px-2 py-1 text-xs font-medium text-gray-500 ring-1 ring-inset ring-gray-500/10 font-mono">
                   {{ product.sku }}
@@ -314,7 +323,7 @@ const printReceipt = () => {
                     Rp {{ Number(product.price).toLocaleString('id-ID') }}
                   </span>
                 </div>
-                <div class="bg-primary/5 p-2 rounded-full text-primary opacity-0 group-hover:opacity-100 transition-all duration-300 transform group-hover:scale-110">
+                <div class="bg-primary/5 p-2 rounded-full text-primary lg:opacity-0 lg:group-hover:opacity-100 transition-all duration-300 transform lg:group-hover:scale-110">
                   <Plus class="h-4 w-4" />
                 </div>
               </div>
@@ -327,7 +336,7 @@ const printReceipt = () => {
         </div>
 
         <!-- Right: Cart -->
-        <div class="w-full md:w-[42%] lg:w-1/3 flex flex-col h-auto md:h-full bg-white/80 backdrop-blur-xl border rounded-2xl shadow-lg overflow-hidden relative">
+        <div class="md:col-span-5 lg:col-span-4 flex flex-col h-auto md:h-full bg-white/80 backdrop-blur-xl border rounded-2xl shadow-lg overflow-hidden relative">
           <div class="p-5 border-b bg-gradient-to-r from-gray-50 to-white">
             <h3 class="font-bold text-xl flex items-center gap-2">
               <ShoppingCart class="h-5 w-5 text-primary" />
@@ -383,68 +392,63 @@ const printReceipt = () => {
 
           <!-- Cart Footer -->
           <div class="p-5 bg-gray-50 border-t flex flex-col gap-4">
-            <div class="grid grid-cols-2 gap-3">
-              <div class="flex flex-col gap-1">
-                <label class="text-xs font-medium text-gray-500 uppercase tracking-wider">Pembeli</label>
-                <Input 
-                  placeholder="Misal: Budi"
-                  v-model="buyerName"
-                  class="bg-white"
-                />
-              </div>
-              <div class="flex flex-col gap-1">
-                <label class="text-xs font-medium text-gray-500 uppercase tracking-wider">Catatan</label>
-                <Input 
-                  placeholder="Misal: Utang"
-                  v-model="note"
-                  class="bg-white"
-                />
-              </div>
-            </div>
-            <div class="flex flex-col gap-1">
-              <label class="text-xs font-medium text-gray-500 uppercase tracking-wider">Kasir</label>
-              <select 
-                v-model="selectedUserId"
-                class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-lg hover:border-primary focus:ring-primary focus:border-primary flex items-center justify-between p-2.5 shadow-sm transition-colors"
-              >
-                <option value="" disabled>Pilih Kasir</option>
-                <option v-for="u in users" :key="u.id" :value="u.id">{{ u.username }}</option>
-              </select>
-            </div>
-
             <div class="flex items-center justify-between py-2 border-b border-gray-100">
               <span class="text-gray-600 font-medium">Total Tagihan</span>
               <span class="text-xl font-bold text-gray-900">Rp {{ subtotal.toLocaleString('id-ID') }}</span>
             </div>
 
-            <div class="flex items-center justify-between py-2 border-b border-gray-100">
-              <span class="text-gray-600 font-medium">Jumlah Bayar</span>
-              <div class="relative w-[140px]">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-sm">Rp</span>
-                <Input 
-                  type="number"
-                  v-model="paymentAmount"
-                  class="pl-8 text-right font-semibold bg-white border-primary/20 focus-visible:ring-primary/30 h-9"
-                  placeholder="0"
-                />
-              </div>
-            </div>
+            <div class="flex gap-2">
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="outline" class="h-12 px-3 shrink-0" aria-label="Informasi Transaksi">
+                    <Settings2 class="h-5 w-5 text-gray-500" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right">
+                  <SheetHeader>
+                    <SheetTitle>Informasi Transaksi</SheetTitle>
+                    <SheetDescription>
+                      Opsional: Masukkan data pembeli dan catatan.
+                    </SheetDescription>
+                  </SheetHeader>
+                  <div class="py-6 flex flex-col gap-5">
+                    <div class="flex flex-col gap-2">
+                      <label class="text-sm font-medium text-gray-700">Pembeli</label>
+                      <Input 
+                        placeholder="Misal: Budi"
+                        v-model="buyerName"
+                      />
+                    </div>
+                    <div class="flex flex-col gap-2">
+                      <label class="text-sm font-medium text-gray-700">Catatan</label>
+                      <Input 
+                        placeholder="Misal: Utang"
+                        v-model="note"
+                      />
+                    </div>
+                    <div class="flex flex-col gap-2">
+                      <label class="text-sm font-medium text-gray-700">Kasir</label>
+                      <select 
+                        v-model="selectedUserId"
+                        class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-lg hover:border-primary focus:ring-primary focus:border-primary p-2.5 shadow-sm transition-colors"
+                      >
+                        <option value="" disabled>Pilih Kasir</option>
+                        <option v-for="u in users" :key="u.id" :value="u.id">{{ u.username }}</option>
+                      </select>
+                    </div>
+                  </div>
+                </SheetContent>
+              </Sheet>
 
-            <div class="flex items-center justify-between py-2">
-              <span class="text-gray-600 font-medium">Kembalian</span>
-              <span class="text-xl font-bold" :class="paymentAmount !== '' && paymentAmount >= subtotal ? 'text-green-600' : 'text-gray-400'">
-                Rp {{ changeAmount.toLocaleString('id-ID') }}
-              </span>
+              <Button 
+                @click="initiateCheckout" 
+                :disabled="cart.length === 0 || isLoading"
+                class="flex-1 h-12 text-lg font-semibold bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-white rounded-xl shadow-md transition-all duration-200"
+              >
+                <Loader2 v-if="isLoading" class="mr-2 h-4 w-4 animate-spin" />
+                {{ isLoading ? "Memproses..." : "Submit" }}
+              </Button>
             </div>
-
-            <Button 
-              @click="initiateCheckout" 
-              :disabled="cart.length === 0 || isLoading"
-              class="w-full h-12 text-lg font-semibold bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-white rounded-xl shadow-md transition-all duration-200"
-            >
-              <Loader2 v-if="isLoading" class="mr-2 h-4 w-4 animate-spin" />
-              {{ isLoading ? "Memproses..." : "Submit" }}
-            </Button>
           </div>
 
           <!-- Success Overlay -->

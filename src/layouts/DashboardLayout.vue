@@ -30,7 +30,7 @@ const pageTitle = computed(() => pageTitles[String(route.name)] ?? '')
 </script>
 
 <template>
-  <div class="flex h-screen h-[100dvh] overflow-hidden bg-gray-50/40 print:h-auto print:bg-white print:block">
+  <div class="flex h-screen h-[100dvh] overflow-hidden bg-gray-50/40 print:h-auto print:bg-white print:block print:overflow-visible">
     <!-- Desktop Sidebar (lg+): always visible -->
     <div class="hidden lg:flex w-64 flex-shrink-0 print:hidden">
       <AppSidebar />

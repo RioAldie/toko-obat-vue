@@ -65,13 +65,13 @@ const handleLogin = async () => {
     <Card class="w-full max-w-md shadow-lg border-0 bg-white/70 backdrop-blur-xl">
       <CardHeader class="space-y-3 pb-6">
         <div class="flex justify-center mb-4">
-          <div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
-            <ShoppingCart class="h-8 w-8" />
+          <div class="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/5 p-2 shadow-sm border border-primary/10">
+            <img src="/brt-icon.png" alt="Berkah Rezeki Tani" class="h-full w-full object-contain drop-shadow-sm" />
           </div>
         </div>
-        <CardTitle class="text-3xl text-center font-bold tracking-tight">Toko Obat Admin</CardTitle>
-        <CardDescription class="text-center text-base">
-          Enter your credentials to access the internal store dashboard
+        <CardTitle class="text-3xl text-center font-bold tracking-tight">Berkah Rezeki Tani</CardTitle>
+        <CardDescription class="text-center text-sm px-2">
+          Punden Banaran Ke-Barat 200 meter, RT/RW 05/02, Dusun Banaran, Desa Banaran Kulon
         </CardDescription>
       </CardHeader>
       <form @submit.prevent="handleLogin">
