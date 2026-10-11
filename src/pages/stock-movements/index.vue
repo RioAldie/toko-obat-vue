@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch, h } from 'vue'
-import { Plus, Loader2, ArrowDownRight, ArrowUpRight, RefreshCcw } from 'lucide-vue-next'
+import { ref, computed, watch, nextTick, h } from 'vue'
+import { Plus, Loader2, ArrowDownRight, ArrowUpRight, RefreshCcw, Search, ChevronsUpDown, Check, X, Package } from 'lucide-vue-next'
+import { onClickOutside } from '@vueuse/core'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -28,7 +29,7 @@ type StockMovement = {
   user?: { id: string, username: string }
 }
 
-type Product = { id: string, name: string, sku: string }
+type Product = { id: string, name: string, sku: string, stock?: number }
 type User = { id: string, username: string }
 
 const movementsQuery = useStockMovements<StockMovement>()
@@ -53,6 +54,56 @@ const form = ref({
   reason: ''
 })
 
+// Searchable product combobox state
+const isProductDropdownOpen = ref(false)
+const productSearchQuery = ref('')
+const productSearchInputRef = ref<HTMLInputElement | null>(null)
+const comboboxRef = ref<HTMLElement | null>(null)
+
+const selectedProduct = computed(() => {
+  return products.value.find(p => p.id === form.value.productId)
+})
+
+const filteredProducts = computed(() => {
+  const q = productSearchQuery.value.trim().toLowerCase()
+  if (!q) return products.value
+  return products.value.filter(p => 
+    (p.name && p.name.toLowerCase().includes(q)) ||
+    (p.sku && p.sku.toLowerCase().includes(q))
+  )
+})
+
+onClickOutside(comboboxRef, () => {
+  isProductDropdownOpen.value = false
+})
+
+const toggleProductDropdown = () => {
+  isProductDropdownOpen.value = !isProductDropdownOpen.value
+  if (isProductDropdownOpen.value) {
+    nextTick(() => {
+      productSearchInputRef.value?.focus()
+    })
+  }
+}
+
+const selectProduct = (p: Product) => {
+  form.value.productId = p.id
+  isProductDropdownOpen.value = false
+  productSearchQuery.value = ''
+}
+
+const clearSelectedProduct = () => {
+  form.value.productId = ''
+  productSearchQuery.value = ''
+}
+
+watch(isOpen, (open) => {
+  if (!open) {
+    isProductDropdownOpen.value = false
+    productSearchQuery.value = ''
+  }
+})
+
 // Default the user selector to the first user once the list is available
 watch(users, (list) => {
   if (!form.value.userId && list.length > 0) {
@@ -64,7 +115,18 @@ watch(users, (list) => {
 const fetchData = () => invalidate('stockMovements', 'products')
 
 const onSubmit = async () => {
-  if (!form.value.productId || !form.value.userId || !form.value.quantity) return
+  if (!form.value.productId) {
+    toast.error('Silakan pilih produk terlebih dahulu')
+    return
+  }
+  if (!form.value.userId) {
+    toast.error('Silakan pilih PIC / Kasir')
+    return
+  }
+  if (!form.value.quantity) {
+    toast.error('Jumlah pergerakan stok tidak boleh 0')
+    return
+  }
   isSubmitting.value = true
   try {
     await fetchApi('/stock-movements', {
@@ -74,6 +136,7 @@ const onSubmit = async () => {
     toast.success('Pergerakan stok berhasil dicatat!')
     isOpen.value = false
     form.value = { productId: '', type: 'IN', quantity: 0, userId: form.value.userId, reason: '' }
+    productSearchQuery.value = ''
     fetchData()
   } catch (error: any) {
     toast.error('Gagal mencatat pergerakan stok', { description: error.message })
@@ -174,17 +237,119 @@ const columns = [
           </DialogHeader>
           <form @submit.prevent="onSubmit" class="space-y-6 mt-4">
             
-            <div class="space-y-3">
-              <Label for="productId" class="text-sm font-semibold text-foreground/90">Produk</Label>
-              <select 
-                id="productId" 
-                v-model="form.productId"
-                required 
-                class="flex h-10 w-full items-center justify-between rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm shadow-inner transition-all ring-offset-background placeholder:text-muted-foreground focus:outline-none focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/20"
-              >
-                <option value="" disabled>Pilih Produk...</option>
-                <option v-for="p in products" :key="p.id" :value="p.id">[{{ p.sku }}] {{ p.name }}</option>
-              </select>
+            <div class="space-y-2">
+              <Label class="text-sm font-semibold text-foreground/90">
+                Produk <span class="text-red-500">*</span>
+              </Label>
+              
+              <div ref="comboboxRef" class="relative">
+                <!-- Trigger Button -->
+                <button
+                  type="button"
+                  @click="toggleProductDropdown"
+                  class="flex h-11 w-full items-center justify-between rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-sm shadow-inner transition-all hover:bg-muted/30 focus:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                >
+                  <div class="flex items-center gap-2 truncate text-left flex-1 min-w-0">
+                    <Package class="h-4 w-4 text-muted-foreground shrink-0" />
+                    <template v-if="selectedProduct">
+                      <span class="font-mono text-xs font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded shrink-0">
+                        {{ selectedProduct.sku }}
+                      </span>
+                      <span class="font-medium text-foreground truncate">
+                        {{ selectedProduct.name }}
+                      </span>
+                      <span class="text-xs text-muted-foreground shrink-0 hidden sm:inline">
+                        (Stok: {{ selectedProduct.stock ?? 0 }})
+                      </span>
+                    </template>
+                    <span v-else class="text-muted-foreground">
+                      Pilih dan cari produk...
+                    </span>
+                  </div>
+                  
+                  <div class="flex items-center gap-1.5 shrink-0 ml-2">
+                    <button
+                      v-if="form.productId"
+                      type="button"
+                      @click.stop="clearSelectedProduct"
+                      class="text-muted-foreground hover:text-red-500 p-0.5 rounded transition-colors"
+                      title="Hapus pilihan"
+                    >
+                      <X class="h-4 w-4" />
+                    </button>
+                    <ChevronsUpDown class="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </button>
+
+                <!-- Searchable Dropdown Panel -->
+                <div
+                  v-if="isProductDropdownOpen"
+                  class="absolute z-50 left-0 right-0 mt-1.5 rounded-xl border border-border bg-white shadow-xl overflow-hidden flex flex-col animate-in fade-in-50 zoom-in-95 duration-150"
+                >
+                  <!-- Search Header -->
+                  <div class="p-2 border-b border-border/50 bg-gray-50/80 flex items-center gap-2">
+                    <Search class="h-4 w-4 text-muted-foreground shrink-0 ml-1" />
+                    <input
+                      ref="productSearchInputRef"
+                      v-model="productSearchQuery"
+                      type="text"
+                      placeholder="Ketik nama produk atau SKU..."
+                      class="w-full bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground"
+                    />
+                    <button
+                      v-if="productSearchQuery"
+                      type="button"
+                      @click="productSearchQuery = ''"
+                      class="text-muted-foreground hover:text-gray-700 p-0.5 rounded"
+                    >
+                      <X class="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  <!-- Product Options List -->
+                  <div class="max-h-56 overflow-y-auto divide-y divide-gray-50 p-1">
+                    <div v-if="productsQuery.isLoading.value" class="flex items-center justify-center py-6 text-xs text-muted-foreground gap-2">
+                      <Loader2 class="h-4 w-4 animate-spin text-primary" />
+                      <span>Memuat data produk...</span>
+                    </div>
+                    
+                    <template v-else-if="filteredProducts.length > 0">
+                      <button
+                        v-for="p in filteredProducts"
+                        :key="p.id"
+                        type="button"
+                        @click="selectProduct(p)"
+                        :class="[
+                          'w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left text-sm transition-all',
+                          form.productId === p.id 
+                            ? 'bg-primary/10 text-primary font-medium' 
+                            : 'hover:bg-gray-100 text-gray-800'
+                        ]"
+                      >
+                        <div class="flex flex-col min-w-0 pr-2">
+                          <span class="font-medium truncate text-gray-900">{{ p.name }}</span>
+                          <div class="flex items-center gap-2 mt-0.5">
+                            <span class="font-mono text-[11px] text-muted-foreground font-semibold">[{{ p.sku }}]</span>
+                            <span :class="[
+                              'text-[11px] px-1.5 py-0.2 rounded font-medium',
+                              (p.stock ?? 0) > 10 ? 'bg-green-50 text-green-700' :
+                              (p.stock ?? 0) > 0 ? 'bg-yellow-50 text-yellow-700' :
+                              'bg-red-50 text-red-700'
+                            ]">
+                              Stok: {{ p.stock ?? 0 }}
+                            </span>
+                          </div>
+                        </div>
+                        <Check v-if="form.productId === p.id" class="h-4 w-4 text-primary shrink-0 ml-2" />
+                      </button>
+                    </template>
+
+                    <div v-else class="py-6 text-center text-xs text-muted-foreground">
+                      Produk "{{ productSearchQuery }}" tidak ditemukan.
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="grid grid-cols-2 gap-4">
