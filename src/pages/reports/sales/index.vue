@@ -67,9 +67,16 @@ const isAlertOpen = ref(false)
 const alertConfig = ref({
   title: '',
   description: '',
-  variant: 'default' as 'default' | 'destructive',
+  variant: 'default' as 'default' | 'destructive' | 'success',
+  confirmText: 'Ya, Proses',
+  cancelText: 'Batal',
+  showConfirm: true,
+  isLoading: false,
   onConfirm: undefined as (() => void) | undefined
 })
+
+const actionLoadingId = ref<string | null>(null)
+const actionLoadingType = ref<'cancel' | 'delete' | null>(null)
 
 // Cancelling a sale restores stock, so refresh those caches too
 const fetchData = () => invalidate('sales', 'products', 'stockMovements')
@@ -117,53 +124,128 @@ const receiptProps = computed(() => {
     items: selectedSale.value.saleDetails.map((item: any) => ({
       name: item.productName || item.product?.name || "Item Manual",
       qty: typeof item.quantity === 'string' ? parseFloat(item.quantity) : item.quantity,
-      price: Number(item.price)
+      price: Number(item.price),
+      unit: item.product?.unit?.name || ''
     })),
-    total: Number(selectedSale.value.totalAmount)
+    total: Number(selectedSale.value.totalAmount),
+    paymentAmount: Number(selectedSale.value.totalAmount),
+    changeAmount: 0
   }
 })
 
-const handleCancelSale = (id: string) => {
+const handleCancelSale = (saleOrId: any) => {
+  const sale = typeof saleOrId === 'object' && saleOrId !== null
+    ? saleOrId
+    : (sales.value.find(s => s.id === saleOrId) || (selectedSale.value?.id === saleOrId ? selectedSale.value : { id: saleOrId }))
+  const invoice = sale.invoiceNumber ? ` (${sale.invoiceNumber})` : ''
+
   alertConfig.value = {
     title: "Batalkan Transaksi",
-    description: "Apakah Anda yakin ingin membatalkan transaksi ini? Total penjualan akan dikurangi, tetapi riwayat tetap disimpan.",
+    description: `Apakah Anda yakin ingin membatalkan transaksi${invoice}? Total penjualan akan dikurangi, status diubah ke CANCELED, dan stok barang akan dikembalikan ke inventaris.`,
     variant: "destructive",
+    confirmText: "Ya, Batalkan",
+    cancelText: "Batal",
+    showConfirm: true,
+    isLoading: false,
     onConfirm: async () => {
-      isAlertOpen.value = false
-      isLoading.value = true
+      alertConfig.value.isLoading = true
+      actionLoadingId.value = sale.id
+      actionLoadingType.value = 'cancel'
       try {
-        await fetchApi(`/sales/${id}/cancel`, { method: "PUT" })
+        await fetchApi(`/sales/${sale.id}/cancel`, { method: "PUT" })
         toast.success('Transaksi berhasil dibatalkan')
-        isDetailOpen.value = false
         fetchData()
+        if (selectedSale.value && selectedSale.value.id === sale.id) {
+          selectedSale.value.status = 'CANCELED'
+        }
+        // Tampilkan modal alert sukses
+        alertConfig.value = {
+          title: "Transaksi Berhasil Dibatalkan",
+          description: `Transaksi${invoice} telah berhasil dibatalkan. Stok produk telah dikembalikan ke inventaris toko.`,
+          variant: "success",
+          confirmText: "OK",
+          cancelText: "Tutup",
+          showConfirm: false,
+          isLoading: false,
+          onConfirm: undefined
+        }
+        isAlertOpen.value = true
       } catch (error: any) {
         toast.error('Gagal membatalkan transaksi', { description: error.message })
+        alertConfig.value = {
+          title: "Gagal Membatalkan",
+          description: error.message || "Terjadi kesalahan saat membatalkan transaksi.",
+          variant: "destructive",
+          confirmText: "OK",
+          cancelText: "Tutup",
+          showConfirm: false,
+          isLoading: false,
+          onConfirm: undefined
+        }
+        isAlertOpen.value = true
       } finally {
-        isLoading.value = false
+        actionLoadingId.value = null
+        actionLoadingType.value = null
       }
     }
   }
   isAlertOpen.value = true
 }
 
-const handleDeleteSale = (sale: any) => {
+const handleDeleteSale = (saleOrId: any) => {
+  const sale = typeof saleOrId === 'object' && saleOrId !== null
+    ? saleOrId
+    : (sales.value.find(s => s.id === saleOrId) || (selectedSale.value?.id === saleOrId ? selectedSale.value : { id: saleOrId }))
+  const invoice = sale.invoiceNumber ? ` (${sale.invoiceNumber})` : ''
+
   alertConfig.value = {
     title: "Hapus Transaksi",
-    description: `Apakah Anda yakin ingin menghapus permanen transaksi ${sale.invoiceNumber || ''}? Transaksi akan dihapus dari riwayat${sale.status !== 'CANCELED' ? ' dan stok barang akan dikembalikan' : ''}.`,
+    description: `Apakah Anda yakin ingin menghapus permanen transaksi${invoice}? Transaksi akan dihapus permanen dari riwayat${sale.status !== 'CANCELED' ? ' dan stok barang akan dikembalikan' : ''}.`,
     variant: "destructive",
+    confirmText: "Ya, Hapus Permanen",
+    cancelText: "Batal",
+    showConfirm: true,
+    isLoading: false,
     onConfirm: async () => {
-      isAlertOpen.value = false
-      isLoading.value = true
+      alertConfig.value.isLoading = true
+      actionLoadingId.value = sale.id
+      actionLoadingType.value = 'delete'
       try {
         await fetchApi(`/sales/${sale.id}`, { method: "DELETE" })
         toast.success('Transaksi berhasil dihapus')
-        isDetailOpen.value = false
-        selectedSale.value = null
         fetchData()
+        if (selectedSale.value && selectedSale.value.id === sale.id) {
+          isDetailOpen.value = false
+          selectedSale.value = null
+        }
+        // Tampilkan modal alert sukses
+        alertConfig.value = {
+          title: "Transaksi Berhasil Dihapus",
+          description: `Transaksi${invoice} telah berhasil dihapus secara permanen dari sistem.`,
+          variant: "success",
+          confirmText: "OK",
+          cancelText: "Tutup",
+          showConfirm: false,
+          isLoading: false,
+          onConfirm: undefined
+        }
+        isAlertOpen.value = true
       } catch (error: any) {
         toast.error('Gagal menghapus transaksi', { description: error.message })
+        alertConfig.value = {
+          title: "Gagal Menghapus Transaksi",
+          description: error.message || "Terjadi kesalahan saat menghapus transaksi.",
+          variant: "destructive",
+          confirmText: "OK",
+          cancelText: "Tutup",
+          showConfirm: false,
+          isLoading: false,
+          onConfirm: undefined
+        }
+        isAlertOpen.value = true
       } finally {
-        isLoading.value = false
+        actionLoadingId.value = null
+        actionLoadingType.value = null
       }
     }
   }
@@ -205,7 +287,9 @@ const exportMonthlyToExcel = async () => {
     const exportData = fullSales.map((sale: any, index: number) => {
       const itemsList = sale.saleDetails?.map((detail: any) => {
         const name = detail.product?.name || detail.productName || "Item Manual"
-        return `${name} (x${detail.quantity})`
+        const qtyFormatted = parseFloat(detail.quantity) || 0
+        const unitStr = detail.product?.unit?.name ? ` ${detail.product.unit.name}` : ''
+        return `${name} (x${qtyFormatted}${unitStr})`
       }).join(', ') || '-'
 
       return {
@@ -279,7 +363,7 @@ const exportMonthlyToExcel = async () => {
   }
 }
 
-const columns = [
+const columns = computed(() => [
   {
     id: "no",
     header: "No.",
@@ -309,7 +393,9 @@ const columns = [
     cell: ({ row }: any) => {
       const itemsList = row.original.saleDetails?.map((detail: any) => {
         const name = detail.product?.name || detail.productName || "Item Manual"
-        return `${name} (x${detail.quantity})`
+        const qtyFormatted = parseFloat(detail.quantity) || 0
+        const unitStr = detail.product?.unit?.name ? ` ${detail.product.unit.name}` : ''
+        return `${name} (x${qtyFormatted}${unitStr})`
       }).join(', ') || '-'
       return h('div', { class: 'text-gray-600 max-w-[250px] truncate', title: itemsList }, itemsList)
     },
@@ -332,10 +418,15 @@ const columns = [
     id: "actions",
     cell: ({ row }: any) => {
       const sale = row.original
+      const isRowLoading = actionLoadingId.value === sale.id
+      const isCancelling = isRowLoading && actionLoadingType.value === 'cancel'
+      const isDeleting = isRowLoading && actionLoadingType.value === 'delete'
+
       const buttons = [
         h(Button, {
           variant: "outline",
           size: "sm",
+          disabled: isRowLoading,
           onClick: () => handleViewDetails(sale.id),
           class: "gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50 h-8"
         }, () => [
@@ -349,12 +440,13 @@ const columns = [
           h(Button, {
             variant: "outline",
             size: "sm",
-            onClick: () => handleCancelSale(sale.id),
+            disabled: isRowLoading,
+            onClick: () => handleCancelSale(sale),
             class: "gap-1.5 text-orange-600 border-orange-200 hover:bg-orange-50 hover:text-orange-700 h-8",
             title: "Batalkan Transaksi"
           }, () => [
-            h(RotateCcw, { class: 'h-3.5 w-3.5' }),
-            "Batal"
+            isCancelling ? h(Loader2, { class: 'h-3.5 w-3.5 animate-spin' }) : h(RotateCcw, { class: 'h-3.5 w-3.5' }),
+            isCancelling ? "Membatalkan..." : "Batal"
           ])
         )
       }
@@ -364,12 +456,13 @@ const columns = [
           h(Button, {
             variant: "outline",
             size: "sm",
+            disabled: isRowLoading,
             onClick: () => handleDeleteSale(sale),
             class: "gap-1.5 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-8",
             title: "Hapus Transaksi (Khusus Admin)"
           }, () => [
-            h(Trash2, { class: 'h-3.5 w-3.5' }),
-            "Hapus"
+            isDeleting ? h(Loader2, { class: 'h-3.5 w-3.5 animate-spin' }) : h(Trash2, { class: 'h-3.5 w-3.5' }),
+            isDeleting ? "Menghapus..." : "Hapus"
           ])
         )
       }
@@ -377,7 +470,7 @@ const columns = [
       return h('div', { class: 'flex items-center gap-1.5' }, buttons)
     },
   },
-]
+])
 </script>
 
 <template>
@@ -516,9 +609,9 @@ const columns = [
                     <span class="text-[10px] text-muted-foreground block">Harga</span>
                     <span class="font-medium">Rp {{ Number(item.price).toLocaleString('id-ID') }}</span>
                   </div>
-                  <div class="text-right w-10 sm:w-12">
+                  <div class="text-right min-w-[45px] sm:w-16">
                     <span class="text-[10px] text-muted-foreground block">Qty</span>
-                    <span class="font-medium">x{{ item.quantity }}</span>
+                    <span class="font-medium">x{{ item.quantity }} {{ item.product?.unit?.name || '' }}</span>
                   </div>
                   <div class="text-right min-w-[70px] sm:w-24">
                     <span class="text-[10px] text-muted-foreground block">Subtotal</span>
@@ -535,12 +628,27 @@ const columns = [
               Cetak Ulang Struk
             </Button>
             <div class="flex items-center gap-2">
-              <Button v-if="selectedSale.status !== 'CANCELED'" variant="outline" class="text-orange-600 border-orange-200 hover:bg-orange-50 h-9 text-xs" @click="handleCancelSale(selectedSale.id)">
-                Batalkan Transaksi
+              <Button 
+                v-if="selectedSale.status !== 'CANCELED'" 
+                variant="outline" 
+                class="text-orange-600 border-orange-200 hover:bg-orange-50 h-9 text-xs gap-1.5" 
+                :disabled="actionLoadingId === selectedSale.id"
+                @click="handleCancelSale(selectedSale)"
+              >
+                <Loader2 v-if="actionLoadingId === selectedSale.id && actionLoadingType === 'cancel'" class="h-3.5 w-3.5 animate-spin" />
+                <RotateCcw v-else class="h-3.5 w-3.5" />
+                {{ actionLoadingId === selectedSale.id && actionLoadingType === 'cancel' ? 'Membatalkan...' : 'Batalkan Transaksi' }}
               </Button>
-              <Button v-if="isAdmin" variant="destructive" class="gap-1.5 h-9 text-xs" @click="handleDeleteSale(selectedSale)">
-                <Trash2 class="h-4 w-4" />
-                Hapus Transaksi
+              <Button 
+                v-if="isAdmin" 
+                variant="destructive" 
+                class="gap-1.5 h-9 text-xs" 
+                :disabled="actionLoadingId === selectedSale.id"
+                @click="handleDeleteSale(selectedSale)"
+              >
+                <Loader2 v-if="actionLoadingId === selectedSale.id && actionLoadingType === 'delete'" class="h-3.5 w-3.5 animate-spin" />
+                <Trash2 v-else class="h-3.5 w-3.5" />
+                {{ actionLoadingId === selectedSale.id && actionLoadingType === 'delete' ? 'Menghapus...' : 'Hapus Transaksi' }}
               </Button>
             </div>
           </div>
@@ -555,9 +663,11 @@ const columns = [
       :title="alertConfig.title"
       :description="alertConfig.description"
       :variant="alertConfig.variant"
-      @confirm="alertConfig.onConfirm"
-      :confirmText="alertConfig.onConfirm ? 'Ya, Proses' : 'OK'"
-      cancelText="Batal"
+      :confirmText="alertConfig.confirmText"
+      :cancelText="alertConfig.cancelText"
+      :showConfirm="alertConfig.showConfirm"
+      :isLoading="alertConfig.isLoading"
+      @confirm="alertConfig.onConfirm ? alertConfig.onConfirm() : undefined"
     />
 
     <Dialog v-model:open="isExportMonthOpen">

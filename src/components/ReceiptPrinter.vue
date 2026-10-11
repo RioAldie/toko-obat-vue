@@ -3,6 +3,7 @@ export type ReceiptItem = {
   name: string
   qty: number
   price: number
+  unit?: string
 }
 
 const props = defineProps<{
@@ -32,7 +33,7 @@ const formattedDate = new Date(props.date).toLocaleString('id-ID', {
       <img 
         src="/brt-icon.png" 
         alt="Logo Berkah Rezeki Tani" 
-        class="h-12 w-12 object-contain mx-auto mb-1.5 filter grayscale contrast-125"
+        class="h-24 w-24 object-contain mx-auto mb-2 filter grayscale contrast-150"
       />
       <h2 class="font-bold text-lg leading-tight mb-1">Berkah Rezeki Tani</h2>
       <p class="text-xs leading-normal">Punden Banaran Ke-Barat 200m</p>
@@ -68,7 +69,7 @@ const formattedDate = new Date(props.date).toLocaleString('id-ID', {
           {{ item.name }}
         </div>
         <div class="flex justify-between items-center text-xs mt-0.5 font-medium">
-          <span>{{ item.qty }} x Rp {{ Number(item.price).toLocaleString('id-ID') }}</span>
+          <span>{{ item.qty }}{{ item.unit ? ` ${item.unit}` : '' }} x Rp {{ Number(item.price).toLocaleString('id-ID') }}</span>
           <span class="font-bold text-sm">Rp {{ (item.qty * item.price).toLocaleString('id-ID') }}</span>
         </div>
       </div>
@@ -81,13 +82,13 @@ const formattedDate = new Date(props.date).toLocaleString('id-ID', {
         <span class="text-lg">Rp {{ Number(total).toLocaleString('id-ID') }}</span>
       </div>
 
-      <div v-if="paymentAmount" class="flex justify-between items-center text-xs font-semibold pt-1">
+      <div v-if="paymentAmount !== undefined && paymentAmount > 0" class="flex justify-between items-center text-xs font-semibold pt-1">
         <span>Tunai / Bayar</span>
-        <span class="text-sm">Rp {{ Number(paymentAmount).toLocaleString('id-ID') }}</span>
+        <span class="text-sm font-bold">Rp {{ Number(paymentAmount).toLocaleString('id-ID') }}</span>
       </div>
-      <div v-if="changeAmount !== undefined && paymentAmount" class="flex justify-between items-center text-xs font-semibold">
+      <div v-if="changeAmount !== undefined && paymentAmount !== undefined && paymentAmount > 0" class="flex justify-between items-center text-xs font-semibold">
         <span>Kembalian</span>
-        <span class="text-sm">Rp {{ Number(changeAmount).toLocaleString('id-ID') }}</span>
+        <span class="text-sm font-bold">Rp {{ Number(changeAmount).toLocaleString('id-ID') }}</span>
       </div>
     </div>
 

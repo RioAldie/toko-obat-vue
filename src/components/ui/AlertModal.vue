@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { AlertCircle, Loader2 } from 'lucide-vue-next'
+import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-vue-next'
 
 const props = withDefaults(defineProps<{
   isOpen: boolean
@@ -17,7 +17,7 @@ const props = withDefaults(defineProps<{
   description: string
   confirmText?: string
   cancelText?: string
-  variant?: 'default' | 'destructive'
+  variant?: 'default' | 'destructive' | 'success'
   isLoading?: boolean
   showConfirm?: boolean
 }>(), {
@@ -36,14 +36,14 @@ const emit = defineEmits<{
 
 const isProcessing = ref(false)
 
-watch(() => props.isOpen, (newVal) => {
-  if (!newVal) {
+watch(() => [props.isOpen, props.isLoading, props.showConfirm], ([newOpen, newLoading, newShowConfirm]) => {
+  if (!newOpen || !newLoading || !newShowConfirm) {
     isProcessing.value = false
   }
 })
 
 const handleClose = () => {
-  if (!isProcessing.value) {
+  if (!isProcessing.value && !props.isLoading) {
     emit('update:isOpen', false)
     emit('close')
   }
@@ -54,8 +54,7 @@ const handleConfirm = async () => {
   try {
     emit('confirm')
   } finally {
-    // If the parent component manages the loading state, it can override this
-    // For now, we rely on the parent to close the modal upon successful confirmation.
+    // If parent handles loading, it sets isLoading
   }
 }
 </script>
@@ -65,7 +64,8 @@ const handleConfirm = async () => {
     <DialogContent class="sm:max-w-[425px]">
       <DialogHeader>
         <div class="flex items-center gap-2">
-          <AlertCircle v-if="variant === 'destructive'" class="h-5 w-5 text-red-500" />
+          <AlertCircle v-if="variant === 'destructive'" class="h-5 w-5 text-red-500 shrink-0" />
+          <CheckCircle2 v-else-if="variant === 'success'" class="h-5 w-5 text-emerald-600 shrink-0" />
           <DialogTitle>{{ title }}</DialogTitle>
         </div>
         <DialogDescription class="pt-2">
@@ -73,12 +73,17 @@ const handleConfirm = async () => {
         </DialogDescription>
       </DialogHeader>
       <DialogFooter class="mt-4">
-        <Button variant="outline" @click="handleClose" :disabled="isProcessing || isLoading">
+        <Button 
+          :variant="showConfirm ? 'outline' : 'default'" 
+          @click="handleClose" 
+          :disabled="isProcessing || isLoading"
+          :class="[!showConfirm && variant === 'success' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : '']"
+        >
           {{ cancelText }}
         </Button>
         <Button 
           v-if="showConfirm"
-          :variant="variant" 
+          :variant="variant === 'success' ? 'default' : variant" 
           @click="handleConfirm"
           :disabled="isProcessing || isLoading"
         >

@@ -31,6 +31,10 @@ type Product = {
   stock: number
   sku: string
   category?: any
+  unit?: {
+    id: string
+    name: string
+  }
 }
 
 type User = {
@@ -193,10 +197,17 @@ const initiateCheckout = () => {
     showAlert('Perhatian', 'Pilih kasir terlebih dahulu!', 'destructive')
     return
   }
+  if (paymentAmount.value !== '' && Number(paymentAmount.value) < subtotal.value) {
+    showAlert('Uang Kurang', `Jumlah uang yang diterima (Rp ${Number(paymentAmount.value).toLocaleString('id-ID')}) kurang dari total tagihan (Rp ${subtotal.value.toLocaleString('id-ID')})!`, 'destructive')
+    return
+  }
   
+  const finalPay = paymentAmount.value !== '' ? Number(paymentAmount.value) : subtotal.value
+  const finalKembali = paymentAmount.value !== '' ? changeAmount.value : 0
+
   alertConfig.value = {
     title: 'Konfirmasi Transaksi',
-    description: 'Apakah Anda yakin ingin memproses transaksi ini?',
+    description: `Total: Rp ${subtotal.value.toLocaleString('id-ID')} | Bayar: Rp ${finalPay.toLocaleString('id-ID')} | Kembali: Rp ${finalKembali.toLocaleString('id-ID')}. Lanjutkan proses?`,
     variant: 'default',
     isConfirmAction: true
   }
@@ -233,6 +244,9 @@ const executeCheckout = async () => {
     })
     
     const cashierName = users.value.find(u => u.id === selectedUserId.value)?.username || "Kasir"
+    const finalPayment = paymentAmount.value !== '' ? Number(paymentAmount.value) : subtotal.value
+    const finalChange = paymentAmount.value !== '' ? changeAmount.value : 0
+
     completedTransaction.value = {
       invoiceNumber: res?.invoiceNumber || `INV-${Date.now()}`,
       date: res?.createdAt || new Date().toISOString(),
@@ -241,11 +255,12 @@ const executeCheckout = async () => {
       items: cart.value.map(item => ({
         name: item.product.name,
         qty: typeof item.quantity === 'string' ? parseFloat(item.quantity) || 0 : item.quantity,
-        price: Number(item.product.price)
+        price: Number(item.product.price),
+        unit: item.product.unit?.name || ''
       })),
       total: subtotal.value,
-      paymentAmount: paymentAmount.value || 0,
-      changeAmount: changeAmount.value
+      paymentAmount: finalPayment,
+      changeAmount: finalChange
     }
     success.value = true
     // Stock changed -> refresh product list (in background), sales report and stock movements
@@ -351,7 +366,10 @@ const printReceipt = () => {
             
             <div v-for="item in cart" :key="item.product.id" class="flex flex-col gap-2 p-3 border rounded-xl bg-white shadow-sm">
               <div class="flex justify-between items-start">
-                <div class="font-semibold text-sm pr-2 leading-tight">{{ item.product.name }}</div>
+                <div class="font-semibold text-sm pr-2 leading-tight">
+                  {{ item.product.name }}
+                  <span v-if="item.product.unit?.name" class="text-xs font-normal text-muted-foreground ml-1">({{ item.product.unit.name }})</span>
+                </div>
                 <button @click="removeFromCart(item.product.id)" class="text-red-400 hover:text-red-600 p-1">
                   <Trash2 class="h-4 w-4" />
                 </button>
@@ -390,16 +408,80 @@ const printReceipt = () => {
           </div>
 
           <!-- Cart Footer -->
-          <div class="p-5 bg-gray-50 border-t flex flex-col gap-4">
-            <div class="flex items-center justify-between py-2 border-b border-gray-100">
-              <span class="text-gray-600 font-medium">Total Tagihan</span>
+          <div class="p-4 bg-gray-50 border-t flex flex-col gap-3">
+            <div class="flex items-center justify-between pb-2 border-b border-gray-200">
+              <span class="text-gray-600 font-medium text-sm">Total Tagihan</span>
               <span class="text-xl font-bold text-gray-900">Rp {{ subtotal.toLocaleString('id-ID') }}</span>
             </div>
 
-            <div class="flex gap-2">
+            <!-- Customer Money & Change Return -->
+            <div class="flex flex-col gap-2">
+              <div class="flex items-center justify-between gap-2">
+                <label for="payment-input" class="text-xs font-semibold text-gray-700 shrink-0">Uang Diterima:</label>
+                <div class="relative flex-1">
+                  <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400">Rp</span>
+                  <Input 
+                    id="payment-input"
+                    type="number"
+                    v-model.number="paymentAmount"
+                    placeholder="Uang Pas (0)"
+                    min="0"
+                    class="h-9 pl-8 pr-2 text-right font-bold text-sm bg-white"
+                  />
+                </div>
+              </div>
+
+              <!-- Quick cash buttons -->
+              <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-xs">
+                <button
+                  type="button"
+                  @click="paymentAmount = subtotal"
+                  :disabled="subtotal === 0"
+                  class="px-2 py-1 rounded bg-primary/10 text-primary font-semibold hover:bg-primary/20 shrink-0 transition-colors disabled:opacity-40"
+                >
+                  Uang Pas
+                </button>
+                <button
+                  v-for="amt in [10000, 20000, 50000, 100000]"
+                  :key="amt"
+                  v-show="amt >= subtotal"
+                  type="button"
+                  @click="paymentAmount = amt"
+                  class="px-2 py-1 rounded bg-gray-200/80 text-gray-800 font-medium hover:bg-gray-300 shrink-0 transition-colors"
+                >
+                  {{ (amt / 1000) }}k
+                </button>
+                <button
+                  v-if="paymentAmount !== ''"
+                  type="button"
+                  @click="paymentAmount = ''"
+                  class="text-[11px] text-muted-foreground hover:text-red-500 ml-auto shrink-0"
+                >
+                  Reset
+                </button>
+              </div>
+
+              <!-- Return / Kembalian Box -->
+              <div 
+                v-if="paymentAmount !== ''"
+                :class="[
+                  'flex items-center justify-between py-1.5 px-3 rounded-lg border text-xs font-medium transition-colors',
+                  Number(paymentAmount) >= subtotal
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-amber-50 border-amber-200 text-amber-800'
+                ]"
+              >
+                <span>{{ Number(paymentAmount) >= subtotal ? 'Kembalian:' : 'Uang Kurang:' }}</span>
+                <span class="text-sm font-bold font-mono">
+                  Rp {{ (Number(paymentAmount) >= subtotal ? changeAmount : (subtotal - Number(paymentAmount))).toLocaleString('id-ID') }}
+                </span>
+              </div>
+            </div>
+
+            <div class="flex gap-2 pt-1">
               <Sheet>
                 <SheetTrigger asChild>
-                  <Button variant="outline" class="h-12 px-3 shrink-0" aria-label="Informasi Transaksi">
+                  <Button variant="outline" class="h-11 px-3 shrink-0" aria-label="Informasi Transaksi" title="Info Pembeli & Catatan">
                     <Settings2 class="h-5 w-5 text-gray-500" />
                   </Button>
                 </SheetTrigger>
@@ -442,7 +524,7 @@ const printReceipt = () => {
               <Button 
                 @click="initiateCheckout" 
                 :disabled="cart.length === 0 || isLoading"
-                class="flex-1 h-12 text-lg font-semibold bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-white rounded-xl shadow-md transition-all duration-200"
+                class="flex-1 h-11 text-base font-semibold bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-white rounded-xl shadow-md transition-all duration-200"
               >
                 <Loader2 v-if="isLoading" class="mr-2 h-4 w-4 animate-spin" />
                 {{ isLoading ? "Memproses..." : "Submit" }}
@@ -452,22 +534,37 @@ const printReceipt = () => {
 
           <!-- Success Overlay -->
           <div v-if="success" class="absolute inset-0 bg-white/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
-            <CheckCircle2 class="h-16 w-16 text-green-500 mb-4" />
-            <h3 class="text-2xl font-bold text-gray-900 mb-2">Transaksi Berhasil!</h3>
-            <p class="text-gray-500 mb-6">Data penjualan telah disimpan ke dalam sistem.</p>
+            <CheckCircle2 class="h-14 w-14 text-green-500 mb-3" />
+            <h3 class="text-2xl font-bold text-gray-900 mb-1">Transaksi Berhasil!</h3>
+            <p class="text-xs text-gray-500 mb-3 font-mono">{{ completedTransaction?.invoiceNumber }}</p>
             
-            <div class="flex gap-4 w-full max-w-xs">
+            <div class="w-full max-w-xs bg-gray-50 p-3 rounded-xl border mb-4 text-left space-y-1 text-xs">
+              <div class="flex justify-between">
+                <span class="text-gray-500">Total Belanja:</span>
+                <span class="font-bold text-gray-900 text-sm">Rp {{ Number(completedTransaction?.total || 0).toLocaleString('id-ID') }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-500">Uang Diterima:</span>
+                <span class="font-semibold text-gray-900">Rp {{ Number(completedTransaction?.paymentAmount || 0).toLocaleString('id-ID') }}</span>
+              </div>
+              <div class="flex justify-between pt-1 border-t border-gray-200 text-emerald-700">
+                <span class="font-semibold">Kembalian:</span>
+                <span class="font-extrabold text-sm font-mono">Rp {{ Number(completedTransaction?.changeAmount || 0).toLocaleString('id-ID') }}</span>
+              </div>
+            </div>
+
+            <div class="flex gap-3 w-full max-w-xs">
               <Button 
-                @click="printReceipt"
-                class="flex-1 gap-2"
+                @click="printReceipt" 
+                class="flex-1 gap-2 h-10"
               >
                 <Printer class="h-4 w-4" />
                 Cetak Struk
               </Button>
               <Button 
                 variant="outline" 
-                @click="handleCloseSuccess"
-                class="flex-1"
+                @click="handleCloseSuccess" 
+                class="flex-1 h-10"
               >
                 Tutup
               </Button>
